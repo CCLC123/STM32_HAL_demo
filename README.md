@@ -1,0 +1,2 @@
+# STM32_HAL_demo
+基于HAL库和STM32CUBEMX的STM32外设驱动demo和常用芯片的驱动
