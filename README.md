@@ -32,24 +32,34 @@
 
 ### 如何使用
 
+- 注册printf函数接口
+
+```c
+/* retarget the C library printf function to the USART */
+int fputc(int ch, FILE* f)
+{
+    WRITE_REG(huart1.Instance->DR, (uint8_t)ch);
+    while(__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TXE) == RESET);
+
+    return ch;
+}
+```
+
 - ​	仿printf发送函数`USART1_Printf_Ex`
 
 ```c
 /**
-  * @brief  仿 printf 写入数据到 p_send_buff, 串口通过 DMA 发送 p_send_buff
-  * @note   需要确保 p_buff 的大小大于待写入字符串的长度, 至少要大于 1 个字节
+  * @brief  串口通过 DMA 发送缓冲区 p_send_buff 中数据 
   * @param  p_send_buff: 数据地址
-  * @param  p_format: 格式化字符串
+  * @param  size: 数据长度, 单位: 字节
   * @return HAL status
   */
-HAL_StatusTypeDef USART1_Printf_Ex(const uint8_t *p_send_buff, const char *p_format, ...)
+HAL_StatusTypeDef USART1_DMA_Send_Ex(const uint8_t *p_send_buff, uint16_t size)
 {
     uint32_t timeout = 0;
-    int bytes = 0;
-    va_list list;
     
     /* 检查函数参数 */
-    if (p_send_buff == NULL || p_format == NULL)
+    if (p_send_buff == NULL || size == 0)
     {
         return HAL_ERROR;
     }
@@ -65,19 +75,14 @@ HAL_StatusTypeDef USART1_Printf_Ex(const uint8_t *p_send_buff, const char *p_for
     }
     __HAL_UART_CLEAR_FLAG(&huart1, UART_FLAG_TC);
     
-    /* 将 format 字符串写入 p_buff_addr 中 */
-    va_start(list, p_format);
-    bytes = vsprintf((void *)p_send_buff, p_format, list);
-    va_end(list);
+    /* 解锁并设置状态标志 */
+    huart1.gState = HAL_UART_STATE_READY;
+    huart1.hdmatx->State = HAL_DMA_STATE_READY;
+    __HAL_UNLOCK(huart1.hdmatx);
+    __HAL_UNLOCK(&huart1);
     
-    if(bytes == -1)
-    {
-        return HAL_ERROR;
-    }
-    
-    /* 发送数据 */
     /* 设置 DMA 的传输次数 */
-    __HAL_DMA_SET_COUNTER(huart1.hdmatx, bytes);
+    __HAL_DMA_SET_COUNTER(huart1.hdmatx, size);
     /* 设置 DMA 的存储区 0 地址 */
     WRITE_REG(huart1.hdmatx->Instance->M0AR, (uint32_t)p_send_buff);
     
@@ -107,23 +112,69 @@ extern uint8_t garr_usart1_recevie_buff1[USART1_BUFF_SIZE];
   * @brief  串口接收回调函数
   * @param  huart: 串口结构体地址
   * @param  p_receive_buff: 接收到的数据起始地址
-  * @param  length: 数据长度
+  * @param  size: 数据长度，单位：字节
   * @return None
   */
-__WEAK void UARTx_RxCallback(UART_HandleTypeDef *p_huart, uint8_t *p_receive_buff, uint16_t length)
+__WEAK void UARTx_RxCallback(UART_HandleTypeDef *p_huart, uint8_t *p_receive_buff, uint16_t size)
 {
     /* 串口1接收回调 */
     if(p_huart == &huart1)
     {
-        USART1_Printf("本次接收到字节数为: %u", length);
-        USART1_DMA_Send_Ex(p_receive_buff, length);
+        USART1_Printf("本次接收到字节数为: %u", size);
+        USART1_DMA_Send_Ex(p_receive_buff, size);
     }
 }
 ```
 
 ### 注意点
 
-- ​	串口初始化的时候，需要开启串口的DMA传输功能，并设置DMA的外设地址和存储器地址，并开启串口接收空闲中断
+- 在STM32CUBEMX中没有开启DMA的中断，需要每次使用DMA和USART（调用HAL库的函数）的时候，需要进行设置状态标志位和解锁操作。
+
+```c
+void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+    
+    /* 解锁并设置状态标志 */
+    huart1.gState = HAL_UART_STATE_READY;
+    huart1.RxState = HAL_UART_STATE_READY;
+    huart1.hdmatx->State = HAL_DMA_STATE_READY;
+    huart1.hdmarx->State = HAL_DMA_STATE_READY;
+    __HAL_UNLOCK(huart1.hdmatx);
+    __HAL_UNLOCK(huart1.hdmarx);
+    __HAL_UNLOCK(&huart1);
+  
+    /* 使能外设 */
+    __HAL_UART_ENABLE(&huart1);
+  
+  
+  /* USER CODE END USART1_Init 2 */
+
+}
+```
+
+- 串口初始化的时候，需要开启串口的DMA传输功能，并设置DMA的外设地址和存储器地址，并开启串口接收空闲中断
 
 ```c
 void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
@@ -198,9 +249,6 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     
     /* 设置 RX DMA 的存储器 0 和存储器 1 地址, 并使能 DMA 的双缓冲模式, 并强制 DMA 为循坏模式 */
     HAL_DMAEx_MultiBufferStart(huart1.hdmarx, (uint32_t)&huart1.Instance->DR, (uint32_t)garr_usart1_recevie_buff0, (uint32_t)garr_usart1_recevie_buff1, USART1_BUFF_SIZE);
-    huart1.hdmarx->State = HAL_DMA_STATE_READY;
-    __HAL_UNLOCK(huart1.hdmarx);
-    __HAL_UNLOCK(&huart1);
     
     /* 使能串口 DMA 传输功能 */
     SET_BIT(huart1.Instance->CR3, USART_CR3_DMAT);
@@ -210,43 +258,132 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     __HAL_UART_CLEAR_IDLEFLAG(&huart1);
     __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
     
+    
   /* USER CODE END USART1_MspInit 1 */
   }
 }
 ```
 
-- 串口初始化完毕后，记得使能外设
+- 屏蔽HAL库的串口中断
 
 ```c
-void MX_USART1_UART_Init(void)
+/**
+* @brief This function handles USART1 global interrupt.
+*/
+void USART1_IRQHandler(void)
 {
+/* USER CODE BEGIN USART1_IRQn 0 */
 
-  /* USER CODE BEGIN USART1_Init 0 */
+/* 发送串口接收中断 */
+if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE) != RESET)
+{
+__HAL_UART_CLEAR_IDLEFLAG(&huart1);
 
-  /* USER CODE END USART1_Init 0 */
+/* 获取本次接收到的字节数与数据缓冲区地址, 并重新设置 DMA 的传输数量和接收缓冲区
+1. 失能 DMA
+2. 获取本次接收到的字节数与数据缓冲区地址，并重新设置数据缓冲区地址
+2. 重新设置 DMA 的传输数量
+3. 清除 DMA 传输标志位
+4. 使能 DMA */
+__HAL_DMA_DISABLE(huart1.hdmarx);
+uint16_t receive_size = USART1_BUFF_SIZE - __HAL_DMA_GET_COUNTER(huart1.hdmarx);
+uint8_t *p_receive_buff = NULL;
+if(READ_BIT(huart1.hdmarx->Instance->CR, DMA_SxCR_CT))
+{
+p_receive_buff = garr_usart1_recevie_buff1;
+CLEAR_BIT(huart1.hdmarx->Instance->CR, DMA_SxCR_CT);
+}
+else
+{
+p_receive_buff = garr_usart1_recevie_buff0;
+SET_BIT(huart1.hdmarx->Instance->CR, DMA_SxCR_CT);
+}
 
-  /* USER CODE BEGIN USART1_Init 1 */
+/* 解锁并设置状态标志 */
+huart1.RxState = HAL_UART_STATE_READY;
+huart1.hdmarx->State = HAL_DMA_STATE_READY;
+__HAL_UNLOCK(huart1.hdmarx);
 
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART1_Init 2 */
-  
-  /* 使能外设 */
-  __HAL_UART_ENABLE(&huart1);
-  
-  /* USER CODE END USART1_Init 2 */
+__HAL_DMA_SET_COUNTER(huart1.hdmarx, USART1_BUFF_SIZE);
+__HAL_DMA_CLEAR_FLAG(huart1.hdmatx, __HAL_DMA_GET_TC_FLAG_INDEX(huart1.hdmatx));
+__HAL_DMA_ENABLE(huart1.hdmarx);
 
+/* 进入接收回调函数 */
+UARTx_RxCallback(&huart1, p_receive_buff, receive_size);
+}
+
+#if 0
+
+/* USER CODE END USART1_IRQn 0 */
+HAL_UART_IRQHandler(&huart1);
+/* USER CODE BEGIN USART1_IRQn 1 */
+
+#endif
+
+/* USER CODE END USART1_IRQn 1 */
+}
+```
+
+- 生成二进制文件`fromelf --bin -o "$L@L.bin" "#L"`
+- 勾选微库
+
+![image-20220919232334496](C:\Users\10854\AppData\Roaming\Typora\typora-user-images\image-20220919232334496.png)
+
+- 设置中断向量表偏移
+
+```c
+/* 设置中断向量表 */
+NVIC_SET_VECTOR(VECT_TAB_FLASH_BASE_ADDRESS, VECT_TAB_OFFSET);
+```
+
+
+
+- 常用函数、宏函数
+
+```c
+#define VECT_TAB_FLASH_BASE_ADDRESS  FLASH_BASE      /*!< Vector Table base address field.
+                                                     This value must be a multiple of 0x200. */
+#define VECT_TAB_SRAM_BASE_ADDRESS   SRAM_BASE       /*!< Vector Table base address field.
+                                                     This value must be a multiple of 0x200. */
+#define VECT_TAB_OFFSET              0x00000000U     /*!< Vector Table base offset field.
+                                                     This value must be a multiple of 0x200. */
+
+/* USER CODE END EC */
+
+/* Exported macro ------------------------------------------------------------*/
+/* USER CODE BEGIN EM */
+
+#define NVIC_SET_VECTOR(vector, offset)  (SCB->VTOR = ((uint32_t)(vector)) | ((uint32_t)(offset) & (uint32_t)0x1FFFFF80))
+
+
+#define BytesSwap16(value)             \
+    ( ((value) & 0xFF00U) >> 8U |      \
+      ((value) & 0x00FFU) << 8U )
+      
+#define BytesSwap32(value)             \
+    ( ((value) & 0xFF000000U) >> 24U | \
+      ((value) & 0x00FF0000U) >> 8U  | \
+      ((value) & 0x0000FF00U) << 8U  | \
+      ((value) & 0x000000FFU) << 24U )
+
+
+inline uint16_t Swap16(uint16_t *p_value)
+{
+    *p_value = ((*p_value) & 0xFF00U) >> 8U |
+               ((*p_value) & 0x00FFU) << 8U ;
+    
+    return *p_value;
+}
+
+
+inline uint32_t Swap32(uint32_t *p_value)
+{
+    *p_value = ((*p_value) & 0xFF000000U) >> 24U |
+               ((*p_value) & 0x00FF0000U) >> 8U  |
+               ((*p_value) & 0x0000FF00U) << 8U  |
+               ((*p_value) & 0x000000FFU) << 24U ;
+               
+    return *p_value;
 }
 ```
 
@@ -254,7 +391,7 @@ void MX_USART1_UART_Init(void)
 
 # chip_driver常用芯片驱动demo
 
-## Flash_W25Q256
+## Flash_W25QXX
 
 ### 开发环境
 
@@ -268,73 +405,94 @@ void MX_USART1_UART_Init(void)
 
 ### 基本介绍
 
-​	W25Q256是一款NOR-Flash芯片，可通过SPI与MCU通信，容量有32MB，每个扇区有4096字节。
+​	W25QXX是一款NOR-Flash芯片，可通过SPI与MCU通信，每个扇区有4096字节。
 
-​	将W25Q256抽象成一个个实例（对象），需要用户提供实例接口函数，通过接口函数与W25Q256进行交互；也就是分成2层，Device层和Driver层，用户提供Driver层，实现Device层的接口函数，从而与W25Q256交互。
+​	将W25QXX抽象成一个个实例（对象），需要用户提供实例接口函数，通过接口函数与W25QXX进行交互；也就是分成2层，Device层和Driver层，用户提供Driver层，实现Device层的接口函数，从而与W25QXX交互。
 
 ​	用户需要实现的Device层中接口如下：
 
 ```c
-typedef en_w25q256_status_t (*w25q256_Init_Func)(void);       /* w25q256 初始化函数 */
-typedef en_w25q256_status_t (*w25q256_Send_Receive_Func)(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, uint8_t is_continue_com);  /* 向 w25q256 发送 p_send_buff 和接收 W25Q256 的数据到 p_receive_buff 函数 */
+/**
+  * @brief   W25QXX 初始化
+  * @note    该函数应初始化与 W25QXX 通信的接口, 比如 SPI
+  * @param   None
+  * @return  en_w25qxx_status_t
+  */
+typedef en_w25qxx_status_t (*w25qxx_Init_Func)(void);
+
+
+/**
+  * @brief   向 W25QXX 发送 p_send_buff 和接收 W25QXX 的数据到 p_receive_buff
+  * @note    该函数实现与 W25QXX 进行数据的收发, 如使用与 W25QXX 通信的接口, 比如 SPI
+  * @param   p_send_buff: 发送缓冲区起始地址
+  * @param   p_receive_buff: 接收缓冲区起始地址
+  * @param   length: 发送/接收的数据长度, 单位: 字节
+  * @param   is_continue_com: 本次发送完毕之后是否要继续通信, 继续通信则 CS 保持低电平
+  *             1: 继续通信, 0: 结束通信
+  * @return  en_w25qxx_status_t
+  */
+typedef en_w25qxx_status_t (*w25qxx_Send_Receive_Func)(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t is_continue_com);
 ```
 
-​	运用结构体`w25q256_obj_t`将W25Q256进行抽象，结构体`w25q256_obj_t`的定义如下：
+​	运用结构体`w25qxx_obj_t`将W25QXX进行抽象，结构体`w25qxx_obj_t`的定义如下：
 
 ```c
 typedef struct
 {
-    w25q256_Init_Func           m_p_Init;           /* 初始化函数指针 */
-    w25q256_Send_Receive_Func   m_p_Send_Receive;   /* 发送与接收函数指针 */
-} w25q256_interface_func_t;
+    w25qxx_Init_Func           m_p_Init;           /* 初始化函数指针 */
+    w25qxx_Send_Receive_Func   m_p_Send_Receive;   /* 发送与接收函数指针 */
+} w25qxx_interface_func_t;
 
 
 typedef struct
 {
     uint64_t m_unique_ID;                           /* 设备唯一ID */
-    w25q256_interface_func_t m_interface_func;      /* 接口函数 */
-} w25q256_obj_t;
+    w25qxx_interface_func_t m_interface_func;       /* 接口函数 */
+} w25qxx_obj_t;
 ```
 
-​	每个W25Q256实例都拥有自己的`m_unique_ID`和`m_interface_func`（接口函数），用户需要实现这些函数接口。
+​	每个W25QXX实例都拥有自己的`m_unique_ID`和`m_interface_func`（接口函数），用户需要实现这些函数接口。
 
 ### 如何使用
 
-​	本例中使用SPI+DMA的方式与W25Q256通信。需要实现`w25q256_Init_Func`和`w25q256_Send_Receive_Func`
+​	本例中使用SPI+DMA的方式与W25QXX通信。需要实现`w25qxx_Init_Func`和`w25qxx_Send_Receive_Func`
 
-- ​	实现`w25q256_Init_Func`函数接口
+- ​	实现`w25qxx_Init_Func`函数接口
 
 ​	可以在该函数中调用STM32CUBEMX生成SPI初始化函数`MX_SPI5_Init()`
 
 ```c
 /**
-  * @brief   W25Q256 初始化
-  * @note    该函数应初始化与 W25Q256 通信的接口，比如 SPI
+  * @brief   W25QXX 初始化
+  * @note    该函数应初始化与 W25QXX 通信的接口, 比如 SPI
   * @param   None
-  * @return  en_w25q256_status_t
+  * @return  en_w25qxx_status_t
   */
-static en_w25q256_status_t I_W25Q256_Init(void)
+static en_w25qxx_status_t I_W25QXX_Init(void)
 {
-    /* 该函数应该初始化与 W25Q256 通信的接口，比如 SPI */
-    /* HAL已经帮我们初始化与 W25Q256 通信的接口了 */
-    return EN_W25Q256_OK;
+    /* 该函数应该初始化与 W25QXX 通信的接口, 比如 SPI */
+    /* HAL已经帮我们初始化与 W25QXX 通信的接口了 */
+    return EN_W25QXX_OK;
 }
 ```
 
-- ​	实现`w25q256_Send_Receive_Func`函数接口
+- ​	实现`w25qxx_Send_Receive_Func`函数接口
+
+本例使用SPI+DMA的方式与W25QXX芯片通信，SPI双向通信，作为主设备，W25QXX作为从设备
 
 ```c
 /**
-  * @brief   向 W25Q256 发送 p_send_buff 和接收 W25Q256 的数据到 p_receive_buff
-  * @note    使用与 W25Q256 通信的接口，比如 SPI , 与 W25Q256 进行数据的收发
+  * @brief   向 W25QXX 发送 p_send_buff 和接收 W25QXX 的数据到 p_receive_buff
+  * @note    该函数实现与 W25QXX 进行数据的收发, 如使用与 W25QXX 通信的接口, 比如 SPI
   * @param   p_send_buff: 发送缓冲区起始地址
   * @param   p_receive_buff: 接收缓冲区起始地址
-  * @param   length: 发送/接收的数据长度，单位：字节
-  * @param   is_continue_com: 本次发送完毕之后是否要继续通信，继续通信则 CS 保持低电平
-  *             1: 继续通信, 0: 结束通信
-  * @return  en_w25q256_status_t
+  * @param   length: 发送/接收的数据长度, 单位: 字节
+  * @param   is_continue_com: 本次发送完毕之后是否要继续通信, 继续通信则 CS 保持低电平
+  *             EN_W25QXX_CLOSE_COM: 结束通信
+  *             EN_W25QXX_CONTINUE_COM: 继续通信
+  * @return  en_w25qxx_status_t
   */
-static en_w25q256_status_t I_W25Q256_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, uint8_t is_continue_com)
+static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t is_continue_com)
 {
     uint32_t timeout = 0;
     HAL_StatusTypeDef state = HAL_OK;
@@ -346,50 +504,77 @@ static en_w25q256_status_t I_W25Q256_Send_Receive(const uint8_t *p_send_buff, ui
     while (__HAL_SPI_GET_FLAG(&hspi5, SPI_FLAG_BSY) == SET)
     {
         timeout++;
-        if (timeout >= W25Q256_TIMEOUT)
+        if (timeout >= W25QXX_TIMEOUT)
         {
-            W25Q256_DEBUG_PRINTF(DEBUG_ERROR(EN_W25Q256_TIMEOUT));
-            return EN_W25Q256_TIMEOUT;
+            return EN_W25QXX_TIMEOUT;
         }
-        W25Q256_Wait_Callback();
     }
     /* 根据参数来设置 CS 的电平 */
-    if (!is_continue_com)
+    if (is_continue_com == EN_W25QXX_CLOSE_COM)
     {
         HAL_GPIO_WritePin(SPI5_CS_GPIO_Port, SPI5_CS_Pin, GPIO_PIN_SET);
     }
     
     if (state == HAL_OK)
     {
-        return EN_W25Q256_OK;
+        return EN_W25QXX_OK;
     }
     else
     {
-        return EN_W25Q256_ERROR;
+        return EN_W25QXX_ERROR;
     }
 }
 ```
 
-- 设置接口函数数组`garr_w25q256_interface_func`和W25Q256实例数组`garr_w25q256`的数量
+- 定义接口函数数组`garr_w25qxx_interface_func`和W25QXX实例数组`garr_w25qxx`的数量
 
 ```c
-#define W25Q256_NUM                 (1U)            /* W25Q256 的数量 */
-const w25q256_interface_func_t garr_w25q256_interface_func[W25Q256_NUM] = /* 函数接口数组 */
-{{I_W25Q256_Init, I_W25Q256_Send_Receive}};
+#define W25QXX_NUM (1U)
+/* 函数接口数组 */
+const w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
 
-w25q256_obj_t garr_w25q256[W25Q256_NUM] = {0};     /* W25Q256 实例对象数组 */
+/* W25QXX 实例对象数组 */
+w25qxx_obj_t garr_w25qxx[W25QXX_NUM] = {0};
+
+/* 初始化第 0 个 W25QXX 实例（对象） */
+W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
 ```
 
-- 调用`W25Q256_Init()`初始化W25Q256对象
+- 调用`W25QXX_Init()`初始化W25QXX对象
 
 ```c
-/* 初始化第 0 个 W25Q256 实例（对象） */
-W25Q256_Init(&garr_w25q256[0], &garr_w25q256_interface_func[0]);
+/* 初始化第 0 个 W25QXX 实例（对象） */
+W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
 ```
+
+- 选择W25QXX型号与芯片ID
+
+```c
+/**
+  * @brief W25QXX 设备类型
+  *        有如下类型: 
+  *             W25Q256
+  *             W25Q128
+  *             W25Q64
+  *             W25Q32
+  */
+#define W25QXX_TYPE             W25Q128
+
+
+/**
+  * @brief W25QXX 相关的 ID 定义, 请查阅芯片数据手册填写     
+  */
+#define W25QXX_MF_ID           (0xEFU)
+#define W25QXX_JEDEC_ID        (0x4019U)
+```
+
+- demo见`main.c`文件
 
 ### 注意点
 
-- 在STM32CUBEMX中没有开启SPI与DMA的中断，需要每次使用使用SPI和DMA的时候，需要进行设置状态标志位和解锁操作。
+- 向W25QXX芯片写数据地址需要按照扇区地址对齐
+
+- 在STM32CUBEMX中没有开启SPI与DMA的中断，需要每次使用SPI和DMA的时候，需要进行设置状态标志位和解锁操作。
 
 ```c
 /* 设置状态标志为 READY, 解锁 SPI 和 DMA  */
