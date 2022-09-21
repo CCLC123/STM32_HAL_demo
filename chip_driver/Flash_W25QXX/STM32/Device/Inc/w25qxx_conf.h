@@ -10,6 +10,18 @@ extern "C" {
 #include "main.h"
 
 /* Export typedef -----------------------------------------------------------*/
+
+
+/* Export define ------------------------------------------------------------*/
+/**
+  * @brief W25QXX 芯片类型
+  */
+#define W25Q256 (0U)
+#define W25Q128 (1U)
+#define W25Q64  (2U)
+#define W25Q32  (3U)
+
+
 /**
   * @brief 使能等待回调函数
   *        等待回调函数为: void W25QXX_Wait_Callback(void);
@@ -49,9 +61,6 @@ extern "C" {
   * @brief 最大超时时间, 单位: CPU 时间    
   */
 #define W25QXX_TIMEOUT          (0x000FFFFFU)
-
-/* Export define ------------------------------------------------------------*/
-
 
 /* Export macro -------------------------------------------------------------*/
 
