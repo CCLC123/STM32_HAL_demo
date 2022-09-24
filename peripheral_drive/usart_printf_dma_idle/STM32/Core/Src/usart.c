@@ -202,15 +202,15 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 /**
   * @brief  串口通过 DMA 发送缓冲区 p_send_buff 中数据 
   * @param  p_send_buff: 数据地址
-  * @param  size: 数据长度, 单位: 字节
+  * @param  length: 数据长度, 单位: 字节
   * @return HAL status
   */
-HAL_StatusTypeDef USART1_DMA_Send_Ex(const uint8_t *p_send_buff, uint16_t size)
+HAL_StatusTypeDef USART1_DMA_Send_Ex(const uint8_t *p_send_buff, uint16_t length)
 {
     uint32_t timeout = 0;
     
     /* 检查函数参数 */
-    if (p_send_buff == NULL || size == 0)
+    if (p_send_buff == NULL || length == 0)
     {
         return HAL_ERROR;
     }
@@ -233,7 +233,7 @@ HAL_StatusTypeDef USART1_DMA_Send_Ex(const uint8_t *p_send_buff, uint16_t size)
     __HAL_UNLOCK(&huart1);
     
     /* 设置 DMA 的传输次数 */
-    __HAL_DMA_SET_COUNTER(huart1.hdmatx, size);
+    __HAL_DMA_SET_COUNTER(huart1.hdmatx, length);
     /* 设置 DMA 的存储区 0 地址 */
     WRITE_REG(huart1.hdmatx->Instance->M0AR, (uint32_t)p_send_buff);
     
@@ -266,7 +266,7 @@ int fputc(int ch, FILE* f)
 HAL_StatusTypeDef USART1_Printf_Ex(const uint8_t *p_send_buff, const char *p_format, ...)
 {
     uint32_t timeout = 0;
-    int size = 0;
+    int length = 0;
     va_list list;
     
     /* 检查函数参数 */
@@ -294,17 +294,17 @@ HAL_StatusTypeDef USART1_Printf_Ex(const uint8_t *p_send_buff, const char *p_for
     
     /* 将 format 字符串写入 p_buff_addr 中 */
     va_start(list, p_format);
-    size = vsprintf((void *)p_send_buff, p_format, list);
+    length = vsprintf((void *)p_send_buff, p_format, list);
     va_end(list);
     
-    if(size == -1)
+    if(length == -1)
     {
         return HAL_ERROR;
     }
     
     /* 发送数据 */
     /* 设置 DMA 的传输次数 */
-    __HAL_DMA_SET_COUNTER(huart1.hdmatx, size);
+    __HAL_DMA_SET_COUNTER(huart1.hdmatx, length);
     /* 设置 DMA 的存储区 0 地址 */
     WRITE_REG(huart1.hdmatx->Instance->M0AR, (uint32_t)p_send_buff);
     
@@ -320,16 +320,16 @@ HAL_StatusTypeDef USART1_Printf_Ex(const uint8_t *p_send_buff, const char *p_for
   * @brief  串口接收回调函数
   * @param  huart: 串口结构体地址
   * @param  p_receive_buff: 接收到的数据起始地址
-  * @param  size: 数据长度，单位：字节
+  * @param  length: 数据长度，单位：字节
   * @return None
   */
-__WEAK void UARTx_RxCallback(UART_HandleTypeDef *p_huart, uint8_t *p_receive_buff, uint16_t size)
+__WEAK void UARTx_RxCallback(UART_HandleTypeDef *p_huart, uint8_t *p_receive_buff, uint16_t length)
 {
     /* 串口1接收回调 */
     if(p_huart == &huart1)
     {
-        USART1_Printf("本次接收到字节数为: %u\r\n", size);
-        USART1_DMA_Send_Ex(p_receive_buff, size);
+        USART1_Printf("本次接收到字节数为: %u\r\n", length);
+        USART1_DMA_Send_Ex(p_receive_buff, length);
     }
 }
 

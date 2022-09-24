@@ -98,9 +98,7 @@ int main(void)
     /* USER CODE BEGIN 2 */
     
     
-#define W25QXX_NUM (1U)
-    extern uint8_t garr_w25qxx_send_buff[W25QXX_SECTOR_SIZE];
-    extern uint8_t garr_w25qxx_receive_buff[W25QXX_SECTOR_SIZE];
+    #define W25QXX_NUM (1U)
 
     /* 函数接口数组 */
     const w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
@@ -111,13 +109,13 @@ int main(void)
     /* 初始化第 0 个 W25QXX 实例（对象） */
     W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
     
-    for (uint32_t i = 0; i < sizeof(garr_w25qxx_send_buff); i++)
+    for (uint32_t i = 0; i < W25QXX_SECTOR_SIZE; i++)
     {
         garr_w25qxx_send_buff[i] = 0x2A;
     }
     
-    Write_W25QXX(&garr_w25qxx[0], 22, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, sizeof(garr_w25qxx_send_buff));
-    Read_W25QXX(&garr_w25qxx[0], 0, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, sizeof(garr_w25qxx_send_buff));
+    Write_W25QXX(&garr_w25qxx[0], 22, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
+    Read_W25QXX(&garr_w25qxx[0], 0 , garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
     
     
     Test_W25QXX(&garr_w25qxx[0], garr_w25qxx_send_buff, garr_w25qxx_receive_buff);

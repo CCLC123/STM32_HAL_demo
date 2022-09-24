@@ -36,6 +36,10 @@ extern SPI_HandleTypeDef hspi5;
 
 /* USER CODE BEGIN Private defines */
 
+extern uint8_t garr_w25qxx_send_buff[];
+extern uint8_t garr_w25qxx_receive_buff[];
+
+
 /* USER CODE END Private defines */
 
 void MX_SPI5_Init(void);

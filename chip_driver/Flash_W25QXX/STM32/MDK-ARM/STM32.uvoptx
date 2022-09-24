@@ -170,7 +170,7 @@
         <Mm>
           <WinNumber>1</WinNumber>
           <SubType>0</SubType>
-          <ItemText>0x20000310 + 4090</ItemText>
+          <ItemText>garr_w25qxx_receive_buff</ItemText>
           <AccSizeX>0</AccSizeX>
         </Mm>
       </MemoryWindow1>

@@ -342,12 +342,12 @@ en_w25qxx_status_t Read_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t
 
 
 /**
-  * @brief   擦除 W25QXX 的扇区
+  * @brief   擦除 W25QXX 的一个扇区
   * @param   p_obj: w25qxx_obj_t 的地址
-  * @param   addr: 扇区地址
+  * @param   addr: 扇区地址, 必须按照扇区地址对齐
   * @return  en_w25qxx_status_t
   */
-static en_w25qxx_status_t W25QXX_Erase(w25qxx_obj_t *p_obj, uint32_t addr)
+static en_w25qxx_status_t W25QXX_Erase_One_Sector(w25qxx_obj_t *p_obj, uint32_t addr)
 {
     en_w25qxx_status_t status = EN_W25QXX_OK;
     uint8_t arr_send_buff[5] = {0};
@@ -382,6 +382,49 @@ static en_w25qxx_status_t W25QXX_Erase(w25qxx_obj_t *p_obj, uint32_t addr)
     arr_send_buff[3] = (addr & 0x000000FFU);
     p_obj->m_interface_func.m_p_Send_Receive(arr_send_buff, arr_receive_buff, sizeof(arr_send_buff) - 1, EN_W25QXX_CLOSE_COM);
     #endif /* W25QXX_TYPE */
+    
+    W25QXX_DEBUG_PRINTF(DEBUG_END(erase));
+    
+    return EN_W25QXX_OK;
+}
+
+
+/**
+  * @brief   擦除 W25QXX 的扇区
+  * @param   p_obj: w25qxx_obj_t 的地址
+  * @param   addr: 扇区地址, 必须按照扇区地址对齐
+  * @return  en_w25qxx_status_t
+  */
+en_w25qxx_status_t W25QXX_Erase(w25qxx_obj_t *p_obj, uint32_t addr, uint32_t length)
+{
+    uint32_t sector_num = 0;
+    
+    W25QXX_DEBUG_PRINTF(DEBUG_BEGIN(erase));
+    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X, length: %u\r\n", __FUNCTION__, addr, length);
+    
+    /* 检查函数参数 */
+    if (p_obj == NULL)
+    {
+        W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_PARAM_IS_NULL));
+        return EN_W25QXX_PARAM_IS_NULL;
+    }
+    
+    /* 地址按扇区地址对齐 */
+    addr &= (~(W25QXX_SECTOR_SIZE - 1));
+    
+    /* 计算需要擦除的扇区数量 */
+    sector_num = length / W25QXX_SECTOR_SIZE;
+    if(length % W25QXX_SECTOR_SIZE)
+    {
+        sector_num++;
+    }
+    
+    /* 擦除扇区 */
+    for(uint32_t i = 0; i < sector_num; i++)
+    {
+        W25QXX_Erase_One_Sector(p_obj, addr);
+        addr += W25QXX_SECTOR_SIZE;
+    }
     
     W25QXX_DEBUG_PRINTF(DEBUG_END(erase));
     
@@ -446,7 +489,7 @@ static en_w25qxx_status_t Page_Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, 
 /**
   * @brief   写 p_send_buff 中的数据到 W25QXX 中
   * @param   p_obj: w25qxx_obj_t 的地址
-  * @param   addr: 写入的 W25QXX 地址, 地址需要按照扇区地址
+  * @param   addr: 写入的 W25QXX 地址, 必须按照扇区地址对齐
   * @param   p_send_buff: 发送缓冲区的地址
   * @param   p_receive_buff: 接收缓冲区的地址
   * @param   length: 写入的长度, 单位: 字节
@@ -481,7 +524,7 @@ en_w25qxx_status_t Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_
         /* 判断当前地址是不是扇区地址, 是扇区地址则先擦除再写入数据 */
         if ((addr & (W25QXX_SECTOR_SIZE - 1)) == 0)
         {
-            W25QXX_Erase(p_obj, addr);
+            W25QXX_Erase_One_Sector(p_obj, addr);
         }
         Page_Write_W25QXX(p_obj, addr, p_send_buff, p_receive_buff, PAGE_SIZE);
         addr += PAGE_SIZE;
@@ -495,7 +538,7 @@ en_w25qxx_status_t Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_
         /* 判断当前地址是不是扇区地址, 是扇区地址则先擦除再写入数据 */
         if ((addr & (W25QXX_SECTOR_SIZE - 1)) == 0)
         {
-            W25QXX_Erase(p_obj, addr);
+            W25QXX_Erase_One_Sector(p_obj, addr);
         }
         Page_Write_W25QXX(p_obj, addr, p_send_buff, p_receive_buff, page_mode);
     }
