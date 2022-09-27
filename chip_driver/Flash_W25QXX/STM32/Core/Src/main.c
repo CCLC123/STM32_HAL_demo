@@ -52,7 +52,7 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static en_w25qxx_status_t I_W25QXX_Init(void);
-static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t is_continue_com);
+static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t e_com_action_status);
 
 /* USER CODE END PFP */
 
@@ -100,25 +100,29 @@ int main(void)
     
     #define W25QXX_NUM (1U)
 
-    /* 函数接口数组 */
-    const w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
-    
-     /* W25QXX 实例对象数组 */
+    /* W25QXX 实例对象数组 */
     w25qxx_obj_t garr_w25qxx[W25QXX_NUM] = {0};
+    
+    /* 函数接口数组 */
+    {w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
     
     /* 初始化第 0 个 W25QXX 实例（对象） */
     W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
+     
+    }
+    
+    
     
     for (uint32_t i = 0; i < W25QXX_SECTOR_SIZE; i++)
     {
         garr_w25qxx_send_buff[i] = 0x2A;
     }
     
-    Write_W25QXX(&garr_w25qxx[0], 22, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
-    Read_W25QXX(&garr_w25qxx[0], 0 , garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
+    W25QXX_Write(&garr_w25qxx[0], 22, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
+    W25QXX_Read(&garr_w25qxx[0], 0 , garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
     
     
-    Test_W25QXX(&garr_w25qxx[0], garr_w25qxx_send_buff, garr_w25qxx_receive_buff);
+    W25QXX_Test(&garr_w25qxx[0], garr_w25qxx_send_buff, garr_w25qxx_receive_buff);
     /* USER CODE END 2 */
     
     /* Infinite loop */
@@ -211,12 +215,12 @@ static en_w25qxx_status_t I_W25QXX_Init(void)
   * @param   p_send_buff: 发送缓冲区起始地址
   * @param   p_receive_buff: 接收缓冲区起始地址
   * @param   length: 发送/接收的数据长度, 单位: 字节
-  * @param   is_continue_com: 本次发送完毕之后是否要继续通信, 继续通信则 CS 保持低电平
-  *             EN_W25QXX_CLOSE_COM: 结束通信
-  *             EN_W25QXX_CONTINUE_COM: 继续通信
+  * @param   e_com_action_status: 本次发送完毕之后是否要继续通信, 继续通信则 CS 应保持低电平
+  *            @arg EN_W25QXX_CLOSE_COM: 结束通信
+  *            @arg EN_W25QXX_CONTINUE_COM: 继续通信
   * @return  en_w25qxx_status_t
   */
-static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t is_continue_com)
+static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t e_com_action_status)
 {
     uint32_t timeout = 0;
     HAL_StatusTypeDef state = HAL_OK;
@@ -234,7 +238,7 @@ static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint
         }
     }
     /* 根据参数来设置 CS 的电平 */
-    if (is_continue_com == EN_W25QXX_CLOSE_COM)
+    if (e_com_action_status == EN_W25QXX_CLOSE_COM)
     {
         HAL_GPIO_WritePin(SPI5_CS_GPIO_Port, SPI5_CS_Pin, GPIO_PIN_SET);
     }

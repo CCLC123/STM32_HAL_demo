@@ -46,12 +46,16 @@
     #define W25QXX_DEBUG_PRINTF(p_format, ...)
 #endif /* ENABLE_W25QXX_DEBUG */
 
+#ifndef NULL
+#define NULL ((void*)0)
+#endif /* NULL */
 
 /* Private macro -------------------------------------------------------------*/
 #define CONVERT_TO_STRING(value)    #value    /* 字符串化 */
 #define DEBUG_ERROR(error)          "[ERROR]%s()->[%u]: %s\r\n", __FILE__, __LINE__, CONVERT_TO_STRING(error)
 #define DEBUG_BEGIN(str)            "[+++]%s()->%s begin\r\n", __FUNCTION__, CONVERT_TO_STRING(str)
 #define DEBUG_END(str)              "[---]%s()->%s end\r\n", __FUNCTION__, CONVERT_TO_STRING(str)
+#define DEBUG_INFO(str, ...)        "[INFO]%s()->" str "\r\n", __FUNCTION__, ## __VA_ARGS__
 
 /* Private variables ---------------------------------------------------------*/
 
@@ -66,7 +70,7 @@
   */
 en_w25qxx_status_t W25QXX_Init(w25qxx_obj_t *p_obj, const w25qxx_interface_func_t *p_interface_func)
 {
-    en_w25qxx_status_t status = EN_W25QXX_OK;
+    en_w25qxx_status_t e_status = EN_W25QXX_OK;
     uint8_t MF_ID = 0;
     uint16_t JEDEC_ID = 0;
     
@@ -80,8 +84,8 @@ en_w25qxx_status_t W25QXX_Init(w25qxx_obj_t *p_obj, const w25qxx_interface_func_
     }
     
     /* 初始化函数接口 */
-    p_obj->m_interface_func.m_p_Init = p_interface_func->m_p_Init;
-    p_obj->m_interface_func.m_p_Send_Receive = p_interface_func->m_p_Send_Receive;
+    p_obj->m_interface_func = *p_interface_func;
+    //p_obj->m_interface_func.m_p_Send_Receive = p_interface_func->m_p_Send_Receive;
     
     /* 执行初始化函数 */
     if (p_obj->m_interface_func.m_p_Init == NULL)
@@ -89,22 +93,22 @@ en_w25qxx_status_t W25QXX_Init(w25qxx_obj_t *p_obj, const w25qxx_interface_func_
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_PARAM_IS_NULL));
         return EN_W25QXX_PARAM_IS_NULL;
     }
-    status = p_obj->m_interface_func.m_p_Init();
+    e_status = p_obj->m_interface_func.m_p_Init();
     
     /* 唤醒设备 */
-    status = W25QXX_Wakeup(p_obj);
+    e_status = W25QXX_Wakeup(p_obj);
     
     /* 检查设备的 MF_ID */
-    status = Get_W25QXX_JEDEC_ID(p_obj, &MF_ID, &JEDEC_ID);
+    e_status = W25QXX_Get_JEDEC_ID(p_obj, &MF_ID, &JEDEC_ID);
     if (MF_ID != W25QXX_MF_ID)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_ERROR));
         return EN_W25QXX_ERROR;
     }
     /* 获取设备唯一ID */
-    status = Read_W25QXX_Unique_ID(p_obj);
+    e_status = W25QXX_Read_Unique_ID(p_obj);
     
-    if (status != EN_W25QXX_OK)
+    if (e_status != EN_W25QXX_OK)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_ERROR));
         return EN_W25QXX_ERROR;
@@ -112,7 +116,7 @@ en_w25qxx_status_t W25QXX_Init(w25qxx_obj_t *p_obj, const w25qxx_interface_func_
     
     W25QXX_DEBUG_PRINTF(DEBUG_END(init));
     
-    return status;
+    return e_status;
 }
 
 
@@ -121,7 +125,7 @@ en_w25qxx_status_t W25QXX_Init(w25qxx_obj_t *p_obj, const w25qxx_interface_func_
   * @param   p_obj: w25qxx_obj_t 的地址
   * @return  en_w25qxx_status_t
   */
-en_w25qxx_status_t Read_W25QXX_Unique_ID(w25qxx_obj_t *p_obj)
+en_w25qxx_status_t W25QXX_Read_Unique_ID(w25qxx_obj_t *p_obj)
 {
     uint8_t arr_send_buff[13] = {0};
     uint8_t arr_receive_buff[13] = {0};
@@ -140,8 +144,7 @@ en_w25qxx_status_t Read_W25QXX_Unique_ID(w25qxx_obj_t *p_obj)
         ((((uint64_t)arr_receive_buff[11]) << 8)  & ((uint64_t)0x000000000000FF00)) |
         (((uint64_t)arr_receive_buff[12])         & ((uint64_t)0x00000000000000FF));
         
-    W25QXX_DEBUG_PRINTF("%s()->Unique ID: 0x%llX\r\n", __FUNCTION__, p_obj->m_unique_ID);
-    
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("Unique ID: 0x%llX", p_obj->m_unique_ID));
     return EN_W25QXX_OK;
 }
 
@@ -170,7 +173,7 @@ static en_w25qxx_status_t Wait_for_W25QXX_Ready(w25qxx_obj_t *p_obj)
         W25QXX_Wait_Callback();
     } while ((arr_receive_buff[1] & STATUS1_BUSY) != 0);
     
-    W25QXX_DEBUG_PRINTF("%s()->ready ok\r\n", __FUNCTION__);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("ready ok"));
     
     return EN_W25QXX_OK;
 }
@@ -193,13 +196,13 @@ static en_w25qxx_status_t W25QXX_Write_Enable(w25qxx_obj_t *p_obj)
     p_obj->m_interface_func.m_p_Send_Receive(arr_send_buff, arr_receive_buff, sizeof(arr_send_buff), EN_W25QXX_CLOSE_COM);
     if ((arr_receive_buff[1] & STATUS1_WEL) != 0)
     {
-        W25QXX_DEBUG_PRINTF("%s()->write enable ok\r\n", __FUNCTION__);
+        W25QXX_DEBUG_PRINTF(DEBUG_INFO("write enable ok"));
         
         return EN_W25QXX_OK;
     }
     else
     {
-        W25QXX_DEBUG_PRINTF("%s()->write enable fail\r\n", __FUNCTION__);
+        W25QXX_DEBUG_PRINTF(DEBUG_INFO("write enable fail"));
         
         return EN_W25QXX_ERROR;
     }
@@ -226,7 +229,7 @@ en_w25qxx_status_t W25QXX_Power_Down(w25qxx_obj_t *p_obj)
     arr_send_buff[0] = ENTER_POWER_DOWN;
     p_obj->m_interface_func.m_p_Send_Receive(arr_send_buff, arr_receive_buff, sizeof(arr_send_buff), EN_W25QXX_CLOSE_COM);
     
-    W25QXX_DEBUG_PRINTF("%s()->power down ok\r\n", __FUNCTION__);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("power down ok"));
     
     return EN_W25QXX_OK;
 }
@@ -252,7 +255,7 @@ en_w25qxx_status_t W25QXX_Wakeup(w25qxx_obj_t *p_obj)
     arr_send_buff[0] = RELEASE_POWER_DOWN;
     p_obj->m_interface_func.m_p_Send_Receive(arr_send_buff, arr_receive_buff, sizeof(arr_send_buff), EN_W25QXX_CLOSE_COM);
     
-    W25QXX_DEBUG_PRINTF("%s()->wakeup ok\r\n", __FUNCTION__);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("wakeup ok"));
     
     return EN_W25QXX_OK;
 }
@@ -265,7 +268,7 @@ en_w25qxx_status_t W25QXX_Wakeup(w25qxx_obj_t *p_obj)
   * @param   p_ID: 存储 ID 变量的地址
   * @return  en_w25qxx_status_t
   */
-en_w25qxx_status_t Get_W25QXX_JEDEC_ID(w25qxx_obj_t *p_obj, uint8_t *p_MF_ID, uint16_t *p_ID)
+en_w25qxx_status_t W25QXX_Get_JEDEC_ID(w25qxx_obj_t *p_obj, uint8_t *p_MF_ID, uint16_t *p_ID)
 {
     uint8_t arr_send_buff[4] = {0};
     uint8_t arr_receive_buff[4] = {0};
@@ -283,7 +286,7 @@ en_w25qxx_status_t Get_W25QXX_JEDEC_ID(w25qxx_obj_t *p_obj, uint8_t *p_MF_ID, ui
     *p_MF_ID = arr_receive_buff[1];
     *p_ID = (((uint16_t)(arr_receive_buff[2])) << 8) | ((uint16_t)arr_receive_buff[3]);
     
-    W25QXX_DEBUG_PRINTF("%s()->MF ID: 0x%X, ID: 0x%X\r\n", __FUNCTION__, *p_MF_ID, *p_ID);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("MF ID: 0x%X, ID: 0x%X", *p_MF_ID, *p_ID));
     
     return EN_W25QXX_OK;
 }
@@ -298,7 +301,7 @@ en_w25qxx_status_t Get_W25QXX_JEDEC_ID(w25qxx_obj_t *p_obj, uint8_t *p_MF_ID, ui
   * @param   length: 读取的长度, 单位: 字节
   * @return  en_w25qxx_status_t
   */
-en_w25qxx_status_t Read_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length)
+en_w25qxx_status_t W25QXX_Read(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length)
 {
     uint8_t arr_send_buff[5] = {0};
     uint8_t arr_receive_buff[5] = {0};
@@ -334,7 +337,7 @@ en_w25qxx_status_t Read_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t
     /* 接收数据 */
     p_obj->m_interface_func.m_p_Send_Receive(p_send_buff, p_receive_buff, length, EN_W25QXX_CLOSE_COM);
     
-    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X, length: %u\r\n", __FUNCTION__, addr, length);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("addr: 0x%X, length: %u", addr, length));
     W25QXX_DEBUG_PRINTF(DEBUG_END(read));
     
     return EN_W25QXX_OK;
@@ -349,20 +352,20 @@ en_w25qxx_status_t Read_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t
   */
 static en_w25qxx_status_t W25QXX_Erase_One_Sector(w25qxx_obj_t *p_obj, uint32_t addr)
 {
-    en_w25qxx_status_t status = EN_W25QXX_OK;
+    en_w25qxx_status_t e_status = EN_W25QXX_OK;
     uint8_t arr_send_buff[5] = {0};
     uint8_t arr_receive_buff[5] = {0};
     
     W25QXX_DEBUG_PRINTF(DEBUG_BEGIN(erase));
-    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X\r\n", __FUNCTION__, addr);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("addr: 0x%X", addr));
     
     /* 等待设备准备好 */
-    status = Wait_for_W25QXX_Ready(p_obj);
+    e_status = Wait_for_W25QXX_Ready(p_obj);
     
     /* 写使能 */
-    status = W25QXX_Write_Enable(p_obj);
+    e_status = W25QXX_Write_Enable(p_obj);
     
-    if (status != EN_W25QXX_OK)
+    if (e_status != EN_W25QXX_OK)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_ERROR));
         return EN_W25QXX_ERROR;
@@ -400,7 +403,7 @@ en_w25qxx_status_t W25QXX_Erase(w25qxx_obj_t *p_obj, uint32_t addr, uint32_t len
     uint32_t sector_num = 0;
     
     W25QXX_DEBUG_PRINTF(DEBUG_BEGIN(erase));
-    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X, length: %u\r\n", __FUNCTION__, addr, length);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("addr: 0x%X, length: %u", addr, length));
     
     /* 检查函数参数 */
     if (p_obj == NULL)
@@ -443,20 +446,20 @@ en_w25qxx_status_t W25QXX_Erase(w25qxx_obj_t *p_obj, uint32_t addr, uint32_t len
   */
 static en_w25qxx_status_t Page_Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length)
 {
-    en_w25qxx_status_t status = EN_W25QXX_OK;
+    en_w25qxx_status_t e_status = EN_W25QXX_OK;
     uint8_t arr_send_buff[5] = {0};
     uint8_t arr_receive_buff[5] = {0};
     
     W25QXX_DEBUG_PRINTF(DEBUG_BEGIN(page write));
-    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X, length: %u\r\n", __FUNCTION__, addr, length);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("addr: 0x%X, length: %u", addr, length));
     
     /* 等待设备准备好 */
-    status = Wait_for_W25QXX_Ready(p_obj);
+    e_status = Wait_for_W25QXX_Ready(p_obj);
     
     /* 写使能 */
-    status = W25QXX_Write_Enable(p_obj);
+    e_status = W25QXX_Write_Enable(p_obj);
     
-    if (status != EN_W25QXX_OK)
+    if (e_status != EN_W25QXX_OK)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_ERROR));
         return EN_W25QXX_ERROR;
@@ -495,7 +498,7 @@ static en_w25qxx_status_t Page_Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, 
   * @param   length: 写入的长度, 单位: 字节
   * @return  en_w25qxx_status_t
   */
-en_w25qxx_status_t Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length)
+en_w25qxx_status_t W25QXX_Write(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length)
 {
     uint32_t page_num = 0;
     uint16_t page_mode = 0;
@@ -516,7 +519,7 @@ en_w25qxx_status_t Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_
     page_num = length / PAGE_SIZE;
     page_mode = length % PAGE_SIZE;
     
-    W25QXX_DEBUG_PRINTF("%s()->addr: 0x%X, page_num: %u, page_mode: %u\r\n", __FUNCTION__, addr, page_num, page_mode);
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("addr: 0x%X, page_num: %u, page_mode: %u", addr, page_num, page_mode));
     
     /* 整页写 */
     for (uint32_t i = 0; i < page_num; i++)
@@ -557,9 +560,9 @@ en_w25qxx_status_t Write_W25QXX(w25qxx_obj_t *p_obj, uint32_t addr, const uint8_
   * @param   p_receive_buff: 接收缓冲区的地址
   * @return  en_w25qxx_status_t
   */
-en_w25qxx_status_t Test_W25QXX(w25qxx_obj_t *p_obj, uint8_t *p_send_buff, uint8_t *p_receive_buff)
+en_w25qxx_status_t W25QXX_Test(w25qxx_obj_t *p_obj, uint8_t *p_send_buff, uint8_t *p_receive_buff)
 {
-    en_w25qxx_status_t status = EN_W25QXX_OK;
+    en_w25qxx_status_t e_status = EN_W25QXX_OK;
     uint32_t i = 0;
     
     W25QXX_DEBUG_PRINTF(DEBUG_BEGIN(test));
@@ -577,15 +580,15 @@ en_w25qxx_status_t Test_W25QXX(w25qxx_obj_t *p_obj, uint8_t *p_send_buff, uint8_
         p_receive_buff[i] = 0;
     }
     
-    status = Write_W25QXX(p_obj, 0, p_send_buff, p_receive_buff, W25QXX_SECTOR_SIZE);
-    if (status != EN_W25QXX_OK)
+    e_status = W25QXX_Write(p_obj, 0, p_send_buff, p_receive_buff, W25QXX_SECTOR_SIZE);
+    if (e_status != EN_W25QXX_OK)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_PARAM_IS_NULL));
         return EN_W25QXX_PARAM_IS_NULL;
     }
     
-    status = Read_W25QXX(p_obj, 0, p_send_buff, p_receive_buff, W25QXX_SECTOR_SIZE);
-    if (status != EN_W25QXX_OK)
+    e_status = W25QXX_Read(p_obj, 0, p_send_buff, p_receive_buff, W25QXX_SECTOR_SIZE);
+    if (e_status != EN_W25QXX_OK)
     {
         W25QXX_DEBUG_PRINTF(DEBUG_ERROR(EN_W25QXX_PARAM_IS_NULL));
         return EN_W25QXX_PARAM_IS_NULL;
@@ -601,6 +604,7 @@ en_w25qxx_status_t Test_W25QXX(w25qxx_obj_t *p_obj, uint8_t *p_send_buff, uint8_
     }
     
     W25QXX_DEBUG_PRINTF(DEBUG_END(test));
+    W25QXX_DEBUG_PRINTF(DEBUG_INFO("test ok!"));
     
     return EN_W25QXX_OK;
 }
