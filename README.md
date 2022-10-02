@@ -16,7 +16,7 @@
 
 ## usart_printf_dma_idle
 
-#### 开发环境
+### 开发环境
 
 - KEIL-MDK：5.27
 
@@ -387,6 +387,120 @@ inline uint32_t Swap32(uint32_t *p_value)
 }
 ```
 
+## gpio_i2c
+
+### 开发环境
+
+- KEIL-MDK：5.27
+
+- STM32CUBEMX：6.6.1
+
+- HAL库：1.27.1
+
+- MCU：STM32F429IGT6
+
+### 基本介绍
+
+​	使用GPIO模拟I2C总线的形式
+
+### 如何使用
+
+​	用户需要实现的函数如下：
+
+```c
+/**
+  * @brief   初始化 I2C 引脚
+  * @note    该函数应开启 GPIO 的时钟
+  * @param   e_pin: I2C 的引脚选择
+  *   @arg     EN_I2C_PIN_SCL: SCL引脚
+  *   @arg     EN_I2C_PIN_SDA: SDA引脚
+  * @return  en_i2c_status_t
+  */
+typedef en_i2c_status_t (*I2C_Init_Pin_Func)(en_i2c_pin_t e_pin);
+
+
+/**
+  * @brief   设置 I2C 引脚模式
+  * @note    该函数应提供配置 GPIO 工作模式的接口
+  * @param   e_pin: I2C 的引脚选择
+  *   @arg     EN_I2C_PIN_SCL: SCL引脚
+  *   @arg     EN_I2C_PIN_SDA: SDA引脚
+  * @param   e_pin_mode: I2C 的引脚模式
+  *   @arg     EN_I2C_PIN_MODE_OUTPUT: 上拉输出模式
+  *   @arg     EN_I2C_PIN_MODE_INPUT: 浮空输入模式
+  * @return  en_i2c_status_t
+  */
+typedef en_i2c_status_t (*I2C_Config_Pin_Mode_Func)(en_i2c_pin_t e_pin, en_i2c_pin_mode_t e_pin_mode);
+
+
+/**
+  * @brief   读取 I2C 引脚的状态
+  * @note    该函数应提供获取 GPIO 引脚电平状态的接口
+  * @param   e_pin: I2C 的引脚选择
+  *   @arg     EN_I2C_PIN_SCL: SCL引脚
+  *   @arg     EN_I2C_PIN_SDA: SDA引脚
+  * @return  en_i2c_pin_status_t
+  */
+typedef en_i2c_pin_status_t (*I2C_Read_Pin_Func)(en_i2c_pin_t e_pin);
+
+
+/**
+  * @brief   写入 I2C 引脚的状态
+  * @note    该函数应提供设置 GPIO 引脚电平状态的接口
+  * @param   e_pin: I2C 的引脚选择
+  *   @arg     EN_I2C_PIN_SCL: SCL引脚
+  *   @arg     EN_I2C_PIN_SDA: SDA引脚
+  * @param   e_pin_status: I2C 的引脚状态选择
+  *   @arg     EN_I2C_RESET: 低电平
+  *   @arg     EN_I2C_SET: 高电平
+  * @return  en_i2c_status_t
+  */
+typedef en_i2c_status_t (*I2C_Write_Pin_Func)(en_i2c_pin_t e_pin, en_i2c_pin_status_t e_pin_status);
+
+
+
+/**
+  * @brief   微秒级延迟
+  * @note    该函数应提供微秒级延迟的接口
+  * @param   us: 微秒值
+  * @return  en_i2c_status_t
+  */
+typedef en_i2c_status_t (*I2C_Delay_us_Func)(uint32_t us);
+```
+
+​	定义I2C对象与上述函数接口对象
+
+```c
+typedef struct
+{
+    I2C_Init_Pin_Func           m_p_Init_Pin;           /* 初始化 I2C 引脚 */
+    I2C_Config_Pin_Mode_Func    m_p_Config_Pin_Mode;    /* 设置 I2C 引脚模式 */
+    I2C_Read_Pin_Func           m_p_Read_Pin;           /* 读取 I2C 引脚的状态 */
+    I2C_Write_Pin_Func          m_p_Write_Pin;          /* 写入 I2C 引脚的状态 */
+    I2C_Delay_us_Func           m_p_Delay_us;           /* 微秒级延迟 */
+} i2c_interface_func_t;
+
+
+typedef struct
+{
+    en_i2c_speed_t m_speed;                              /* 速度 */
+    i2c_interface_func_t m_interface_func;               /* 接口函数 */
+} i2c_obj_t;
+```
+
+​	调用初始化函数进行初始化
+
+```c
+en_i2c_status_t I2C_Init(i2c_obj_t *p_obj, const i2c_interface_func_t *p_interface_func, en_i2c_speed_t speed);
+```
+
+​	例如
+
+```c
+i2c_interface_func_t i2c_interface = {I_I2C_Init_Pin_Func, I_I2C_Config_Pin_Mode_Func, I_I2C_Read_Pin_Func, I_I2C_Write_Pin_Func, I_I2C_Delay_us_Func};
+I2C_Init(&i2c_at24cxx, &i2c_interface, EN_I2C_SPEED_250KHZ);
+```
+
 
 
 # chip_driver常用芯片驱动demo
@@ -628,5 +742,85 @@ void MX_SPI5_Init(void)
   /* USER CODE END SPI5_Init 2 */
 
 }
+```
+
+## AT24CXX
+
+### 开发环境
+
+- KEIL-MDK：5.27
+
+- STM32CUBEMX：6.6.1
+
+- HAL库：1.27.1
+
+- MCU：STM32F429IGT6
+
+### 基本介绍
+
+​	将AT24CXX抽象成一个个实例（对象），需要用户提供实例接口函数，通过接口函数与AT24CXX进行交互；也就是分成2层，Device层和Driver层，用户提供Driver层，实现Device层的接口函数，从而与AT24CXX交互。
+
+### 如何使用
+
+​	用户需要实现的Device层中接口如下：
+
+```c
+/**
+  * @brief   AT24CXX 初始化
+  * @note    该函数应初始化与 AT24CXX 通信的接口, 如 I2C
+  * @param   None
+  * @return  en_at24cxx_status_t
+  */
+typedef en_at24cxx_status_t (*AT24CXX_Init_Func)(void);
+
+
+/**
+  * @brief   向 AT24CXX 发送 p_send_buff 中的数据
+  * @note    该函数实现与 AT24CXX 进行数据的发送, 如使用与 AT24CXX 通信的接口, 如 I2C
+  * @param   p_send_buff: 发送缓冲区起始地址
+  * @param   length: 发送的数据长度, 单位: 字节
+  * @param   e_start_status: 本次通信前是否发送起始信号
+  *            @arg EN_AT24CXX_GENETATE_START: 发送起始信号
+  *            @arg EN_AT24CXX_NOT_GENETATE_START: 不发送起始信号
+  * @param   e_stop_status: 本次通信后是否发送停止信号
+  *            @arg EN_AT24CXX_GENETATE_STOP: 发送停止信号
+  *            @arg EN_AT24CXX_NOT_GENETATE_STOP: 不发送停止信号
+  * @return  en_at24cxx_status_t
+  */
+typedef en_at24cxx_status_t (*AT24CXX_Send_Func)(const uint8_t *p_send_buff, uint32_t length, en_at24cxx_start_t e_start_status, en_at24cxx_stop_t e_stop_status);
+
+
+/**
+  * @brief   从 AT24CXX 接收数据到 p_receive_buff
+  * @note    该函数实现与 AT24CXX 进行数据的接收, 如使用与 AT24CXX 通信的接口, 如 I2C
+  * @param   p_receive_buff: 接收缓冲区起始地址
+  * @param   length: 接收的数据长度, 单位: 字节
+  * @param   e_start_status: 本次通信前是否发送起始信号
+  *            @arg EN_AT24CXX_GENETATE_START: 发送起始信号
+  *            @arg EN_AT24CXX_NOT_GENETATE_START: 不发送起始信号
+  * @param   e_stop_status: 本次通信后是否发送停止信号
+  *            @arg EN_AT24CXX_GENETATE_STOP: 发送停止信号
+  *            @arg EN_AT24CXX_NOT_GENETATE_STOP: 不发送停止信号
+  * @return  en_at24cxx_status_t
+  */
+typedef en_at24cxx_status_t (*AT24CXX_Receive_Func)(uint8_t *p_receive_buff, uint32_t length, en_at24cxx_start_t e_start_status, en_at24cxx_stop_t e_stop_status);
+
+```
+
+​	 函数接口定义与AT24CXX对象定义如下：
+
+```
+typedef struct
+{
+    AT24CXX_Init_Func           m_p_Init;           /* 初始化函数指针 */
+    AT24CXX_Send_Func           m_Send_Func;        /* 发送数据函数指针 */
+    AT24CXX_Receive_Func        m_Receive_Func;     /* 接收数据函数指针 */
+} at24cxx_interface_func_t;
+
+
+typedef struct
+{
+    at24cxx_interface_func_t m_interface_func;      /* 接口函数 */
+} at24cxx_obj_t;
 ```
 

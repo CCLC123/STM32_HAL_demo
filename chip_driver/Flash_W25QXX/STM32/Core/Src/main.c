@@ -52,7 +52,7 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static en_w25qxx_status_t I_W25QXX_Init(void);
-static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t e_com_action_status);
+static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length, en_w25qxx_com_action_status_t e_com_action_status);
 
 /* USER CODE END PFP */
 
@@ -98,17 +98,17 @@ int main(void)
     /* USER CODE BEGIN 2 */
     
     
-    #define W25QXX_NUM (1U)
-
+#define W25QXX_NUM (1U)
+    
     /* W25QXX 实例对象数组 */
     w25qxx_obj_t garr_w25qxx[W25QXX_NUM] = {0};
     
     /* 函数接口数组 */
-    {w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
-    
-    /* 初始化第 0 个 W25QXX 实例（对象） */
-    W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
-     
+    {
+        w25qxx_interface_func_t garr_w25qxx_interface_func[W25QXX_NUM] = {{I_W25QXX_Init, I_W25QXX_Send_Receive}};
+        
+        /* 初始化第 0 个 W25QXX 实例（对象） */
+        W25QXX_Init(&garr_w25qxx[0], &garr_w25qxx_interface_func[0]);
     }
     
     
@@ -119,7 +119,7 @@ int main(void)
     }
     
     W25QXX_Write(&garr_w25qxx[0], 22, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
-    W25QXX_Read(&garr_w25qxx[0], 0 , garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
+    W25QXX_Read(&garr_w25qxx[0], 0, garr_w25qxx_send_buff, garr_w25qxx_receive_buff, W25QXX_SECTOR_SIZE);
     
     
     W25QXX_Test(&garr_w25qxx[0], garr_w25qxx_send_buff, garr_w25qxx_receive_buff);
@@ -220,7 +220,7 @@ static en_w25qxx_status_t I_W25QXX_Init(void)
   *            @arg EN_W25QXX_CONTINUE_COM: 继续通信
   * @return  en_w25qxx_status_t
   */
-static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t e_com_action_status)
+static en_w25qxx_status_t I_W25QXX_Send_Receive(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length, en_w25qxx_com_action_status_t e_com_action_status)
 {
     uint32_t timeout = 0;
     HAL_StatusTypeDef state = HAL_OK;

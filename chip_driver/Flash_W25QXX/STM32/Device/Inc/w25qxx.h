@@ -49,7 +49,7 @@ typedef en_w25qxx_status_t (*W25QXX_Init_Func)(void);
   *            @arg EN_W25QXX_CONTINUE_COM: ¼ÌÐøÍ¨ÐÅ
   * @return  en_w25qxx_status_t
   */
-typedef en_w25qxx_status_t (*W25QXX_Send_Receive_Func)(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint16_t length, en_w25qxx_com_action_status_t e_com_action_status);
+typedef en_w25qxx_status_t (*W25QXX_Send_Receive_Func)(const uint8_t *p_send_buff, uint8_t *p_receive_buff, uint32_t length, en_w25qxx_com_action_status_t e_com_action_status);
 
 
 typedef struct

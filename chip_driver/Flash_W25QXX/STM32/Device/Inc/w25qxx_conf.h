@@ -41,11 +41,10 @@ extern "C" {
 
 /**
   * @brief W25QXX 设备类型
-  *        有如下类型: 
-  *             W25Q256
-  *             W25Q128
-  *             W25Q64
-  *             W25Q32
+  *   @arg   W25Q256
+  *   @arg   W25Q128
+  *   @arg   W25Q64
+  *   @arg   W25Q32
   */
 #define W25QXX_TYPE             W25Q128 
 
